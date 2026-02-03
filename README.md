@@ -111,14 +111,15 @@ Price: +0.000297 per $1
 
 **Interpretation: **after holding room type and price constant, megahost listings are predicted to score ~0.21 stars lower than comparable individual-host listings, and boutique listings score ~0.09 lower.
 
-## Comment on whether your final estimated impact of megahost and boutique host statusis economically meaningful
+## Comments and suggestions
+### Is our final estimated impact of megahost and boutique host status economically meaningful?
 The final estimated impact of megahost and boutique host status on guest experience is economically meaningful. 
 
 Holding room type and price constant, megahost listings are predicted to have about 0.21 fewer stars than comparable individual-host listings, and boutique listings are predicted to have about 0.09 fewer stars than comparable individual-host listings. 
 
 Looking at the histogram of review_scores_rating in question 2, we can see that many listings in this dataset have ratings near 4.8 - 4.9. Therefore, a drop of 0.21 or 0.09 can be very large, and can move a listing below common rating cutoffs that guests use when filtering, which materially reduces visibility. That is why the estimated impacts are economically meaningful.
 
-## Comment on policy and managerial implications of the findings
+### Policy and managerial implications of the findings
 Should Airbnb keep courting megahosts?
 Answer: **No, not without conditions.**
 
