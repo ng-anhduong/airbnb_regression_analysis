@@ -1,0 +1,201 @@
+---
+title: "Airbnb: Do megahosts improve guest experience? - A Regression Analysis"
+author: "Nguyen Anh Duong"
+date: "2025-09-22"
+output:
+  word_document: default
+---
+### Import dataset
+
+```{r setup, include=TRUE}
+library("readr")
+library(dplyr)
+airbnb <- read_csv('airbnb.csv')
+
+```
+
+### Create categorical variable host_type and report the number of listings and proportion of total listings for each of the 3 categories in host_type.
+```{r q1, include=TRUE}
+airbnb <- airbnb %>%
+  mutate(
+    host_type = case_when(
+      host_total_listings_count >= 21 ~ "megahost",
+      host_total_listings_count >=  2 ~ "boutique",
+      host_total_listings_count ==  1 ~ "individual",
+      TRUE ~ NA_character_)
+  )
+
+q1 <- airbnb %>%
+  filter(!is.na(host_type)) %>%
+  count(host_type, name = "n_listings") %>%
+  mutate(prop = n_listings / sum(n_listings))
+
+q1
+```
+
+##### Number of listings:
+boutique: 10844
+
+individual: 4037
+
+megahost: 4790
+
+##### Proportion of total listings:
+boutique: 55.13% of total listings
+
+individual: 20.52% of total listings
+
+megahost: 24.35% of total listings
+
+### Plot a histogram of variable review_scores_rating and calculate proportion of listings that have overall ratings of above 4.
+```{r q2, include=TRUE}
+hist(airbnb$review_scores_rating, breaks = 20, xlab = "review_scores_rating", main = "Histogram of review_scores_rating")
+prop_above4 <- mean(airbnb$review_scores_rating > 4, na.rm = TRUE)
+prop_above4
+```
+From the result, we can see that about 99% of listings have overall ratings of above 4.
+
+### Run simple regression review_scores_rating = β0 + β1megahost_i + β2boutique_i + u_i
+```{r q3, include=TRUE}
+# Set the levels of host_type
+airbnb$host_type <- factor(airbnb$host_type, levels = c("individual","megahost","boutique"))
+
+# Run the simple regression
+model <- lm(review_scores_rating ~ host_type, data = airbnb)
+summary(model)
+
+```
+Interpretation:
+
+Estimated coefficient ˆβ1: Compared to individual hosts, megahost listings have predicted review scores about 0.198 units lower, on average, ceteris paribus. 
+
+Estimated coefficient ˆβ2: Compared to individual hosts, boutique listings have predicted review scores about 0.079 units lower, on average, ceteris paribus.
+
+Significance:
+
+Since ˆβ1 has an absolute t value of 43.90 > 2, the estimates ˆβ1 is statistically significant and different from zero.
+
+Since ˆβ2 has an absolute t value of 20.28 > 2, the estimates ˆβ2 is statistically significant and different from zero.
+
+### Find the expected review score if the host is an individual and check that this equals the sample mean of individual listings’ review scores in the data. Also check if the estimated coefficient ˆβ1 equals the difference in sample means between megahost and individual listings’ review scores in the data.
+```{r q4, include=TRUE}
+# Sample mean by type
+means_by_type <- airbnb %>%
+  group_by(host_type) %>%
+  summarise(mean_rating = mean(review_scores_rating, na.rm = TRUE), .groups = "drop")
+
+mean_individual <- means_by_type %>% filter(host_type == "individual") %>% pull(mean_rating)
+mean_megahost <- means_by_type %>% filter(host_type == "megahost") %>% pull(mean_rating)
+mean_boutique <- means_by_type %>% filter(host_type == "boutique") %>% pull(mean_rating)
+
+# Compare
+coef(model)[1]
+mean_individual
+
+coef(model)[2]
+mean_megahost - mean_individual
+```
+
+From the simple regression, the expected review score if the host is an individual is the value of coefficient β0 = 4.844
+
+As shown by the 2 comparisons,
+
+The expected review score if the host is an individual (β0 = 4.844) equals the sample mean of individual listings’ review scores in the data (mean_individual = 4.844). 
+
+Similarly, the estimated coefficient ˆβ1 = -0.198  equals the difference in sample means between megahost and individual listings’ review scores in the data (mean_megahost - mean_individual = -0.198)
+
+### Potential confounding variable 1: room_type
+```{r q5, include=TRUE}
+distinct_room_types <- airbnb %>% distinct(room_type) %>% arrange(room_type)
+distinct_room_types
+```
+With variable room_type (1 = Entire home/apt; 0 = Private room), we have:
+
+Effect of room_type on host_type: Megahosts more often operate entire homes -> ˆρxw > 0
+
+Effect of room_type on review_scores_rating: Entire homes usually score higher due to more privacy/space -> β2_notes > 0
+
+Since ˆρxw * β2_notes > 0 -> positive bias on review_scores_rating. If room_type is omitted, the estimated slope (ˆβ1) on review_scores_rating in the simple regression is biased upward
+
+Decision: should control for room_type in the multiple regression
+
+### Potential confounding variable 2: minimum_nights
+Effect of minimum_nights on host_type: Megahosts often impose higher minimum stays for easier scheduling/utilization -> ˆρxw > 0
+
+Effect of minimum_nights on review_scores_rating: the minimum-night rule should not affect the actual stay quality; the reviewer already accepted it. No direct effect on the rating components. -> β2_notes = 0
+
+Since β2_notes = 0, controlling for minimum_nights does not help in reducing bias, but will lead to higher variances in ˆβ1 since host_type is correlated with minimum_nights.
+
+Decision: do not control for minimum_nights in the multiple regression
+
+### Potential confounding variable 3: host_identity_verified
+Effect of host_identity_verified on host_type: professional/large hosts are more likely to complete verification -> ˆρxw > 0
+
+Effect of host_identity_verified on review_scores_rating: whether the platform verified the host’s ID should not change the guest experiences. After staying, ratings should not systematically depend on this -> β2_notes = 0
+
+Since β2_notes = 0, controlling for host_identity_verified does not help in reducing bias, but will lead to higher variances in ˆβ1 since host_type is correlated with host_identity_verified.
+
+Decision: do not control for host_identity_verified in the multiple regression
+
+### Run multiple regression controlling for 1 additional variable: room_type 
+```{r q9, include=TRUE}
+# Set the levels of room_type
+airbnb$room_type <- factor(airbnb$room_type, levels = c("Private room", "Entire home/apt"))
+
+# Run the regression
+model_multiple <- lm(review_scores_rating ~ host_type + room_type,
+                     data = airbnb)
+
+summary(model_multiple)
+```
+Interpretation:
+
+Estimated coefficient ˆβ1: Compared to individual hosts, megahost listings have predicted review scores about 0.196 units lower, on average, ceteris paribus. 
+
+Estimated coefficient ˆβ2: Compared to individual hosts, boutique listings have predicted review scores about 0.080 units lower, on average, ceteris paribus.
+
+Significance:
+
+Since ˆβ1 has an absolute t value of 43.146 > 2, the estimates ˆβ1 is statistically significant and different from zero.
+
+Since ˆβ2 has an absolute t value of 20.542 > 2, the estimates ˆβ2 is statistically significant and different from zero.
+
+Comments:
+The simple regression earlier gave roughly: ˆβ1 = −0.198, and ˆβ2 = −0.079. 
+
+Controlling for room_type, ˆβ1 moved upwards (less negative) to −0.196 (change ≈ +0.002), and ˆβ2 moved downwards (more negative) to −0.080 (change ≈ -0.001).
+
+The direction of impact of megahost status on review rating has not changed: it remains negative.
+
+### Run multiple regression controlling for additional confounding variables
+In this multiple regression, I choose to control for 1 additional variable: price
+
+I found price to be a potential (highly plausible) confounding variable, since megahosts tend to charge higher (positive correlation between host_type and price), and higher price tends to come with tougher reviews (positive correlation between price and review_scores_rating).So I expect that omitting price can introduce a megative bias. 
+
+```{r q10, include=TRUE}
+# Price is originally a char value, containing "$". So we convert price into numeric values
+airbnb <- airbnb %>%
+  mutate(
+    price = parse_number(price)
+  )
+
+# Run the regression
+model_multiple_2 <- lm(review_scores_rating ~ host_type + room_type + price, data = airbnb)
+
+summary(model_multiple_2)
+
+```
+
+Interpretation:
+
+Estimated coefficient ˆβ1: Compared to individual hosts, megahost listings have predicted review scores about 0.212 units lower, on average, ceteris paribus. 
+
+Estimated coefficient ˆβ2: Compared to individual hosts, boutique listings have predicted review scores about 0.087 units lower, on average, ceteris paribus.
+
+Significance:
+
+Since ˆβ1 has an absolute t value of 47.05 > 2, the estimates ˆβ1 is statistically significant and different from zero.
+
+Since ˆβ2 has an absolute t value of 22.64 > 2, the estimates ˆβ2 is statistically significant and different from zero.
+
+
